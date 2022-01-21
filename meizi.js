@@ -10,7 +10,7 @@ const cheerio = require("cheerio");
 const path = require('path')
 const suffixStr = "abcdefghi";
 const baseUrl = "https://mmzztt.com/photo/";
-const dir = "H:/bizhi"
+const dir = "F:/bizhi"
 const headers = {
     'If-None-Match': 'W/"5cc2cd8f-2c58"',
     "Referer": baseUrl,
@@ -37,14 +37,17 @@ async function sleep(time) {
 }
 
 async function downloadImg(url, dirName) {
-	let basename = path.basename(url)
-	let filePath = path.join(dirName, basename)
-	console.time(basename)
-	let res = await fetch(url, { method: 'get', headers: headers });
-	let writeStream = fs.createWriteStream(filePath)
-	writeStream.on('finish', console.timeEnd.bind(console, basename))
-	res.body.pipe(writeStream)
-    return "1"
+    let basename = new Date().getTime() + path.basename(url)
+    let filePath = path.join(dirName, basename)
+    console.time(basename)
+    let res = await fetch(url, { method: 'get', headers: headers });
+    if (res.status == 404) {
+        return false;
+    }
+    let writeStream = fs.createWriteStream(filePath)
+    writeStream.on('finish', console.timeEnd.bind(console, basename))
+    res.body.pipe(writeStream)
+    return true;
 }
 
 async function download(url) {
@@ -52,7 +55,7 @@ async function download(url) {
     if (response && response.status == 200) {
         let data = await response.text();
         let $ = cheerio.load(data);
-        let dirName = path.join(dir,$("h1[class='uk-article-title uk-text-truncate']").text());
+        let dirName = path.join(dir, $("h1[class='uk-article-title uk-text-truncate']").text());
         let url = $("img").eq(0).attr("src");
         let imgBaseUrl = url.replace(/[0-9]{2}[a-i]+\.jpg$/, "");
         if (!fs.existsSync(dirName)) {
@@ -64,17 +67,21 @@ async function download(url) {
         }
         dImgs();
         async function dImgs() {
-            let message = await downloadImg(url, dirName);
-            console.log(message);
-            console.log("==================");
-            await sleep(2000)
-            for (let i = 1; i <= suffixArr; i++) {
-                let message = await downloadImg(`${imgBaseUrl}${num}.jpg`, dirName);
-                console.log(message);
-                await sleep(2000)
+            console.log("=========开始下载=========");
+            await downloadImg(url, dirName);
+            await sleep(3000)
+            for (let i = 0; i < suffixArr.length;) {
+                let suffix = suffixArr[i];
+                let flag = await downloadImg(`${imgBaseUrl}${suffix}.jpg`, dirName);
+                if (flag) {
+                    console.log("success");
+                    i = parseInt(i / 9) * 9 + 9;
+                } else {
+                    i++;
+                }
+                await sleep(3000);
             }
         }
-
     } else {
 
     }
