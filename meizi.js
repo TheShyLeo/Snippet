@@ -6,10 +6,11 @@
 
 const fs = require('fs');
 const fetch = require('node-fetch');
-const request = require("request");
 const cheerio = require("cheerio");
+const path = require('path')
 const suffixStr = "abcdefghi";
 const baseUrl = "https://mmzztt.com/photo/";
+const dir = "H:/bizhi"
 const headers = {
     'If-None-Match': 'W/"5cc2cd8f-2c58"',
     "Referer": baseUrl,
@@ -19,7 +20,7 @@ let suffixArr = [];
 
 // 返回后缀
 function suffix() {
-    var str = "";
+    let str = "";
     for (let i = 2; i < 56; i++) {
         let ch = i > 9 ? i : '0' + i;
         for (let char of suffixStr) {
@@ -34,34 +35,26 @@ function suffix() {
 async function sleep(time) {
     return new Promise((resolve) => setTimeout(resolve, time));
 }
-async function downloadImg(url, dirName) {
-    return new Promise((resolve, reject) => {
-        var fName = /\d*\.jpg/.exec(url)[0];
-        //解决妹子图防盗链
-        var options = {
-            uri: url,
-            headers: headers
-        };
-        let writeStream = fs.createWriteStream(`${dirName}/${fName}`, { autoClose: true })
-        request(options).pipe(writeStream);
-        writeStream.on('finish', function () {
-            resolve(`下载: ${url} 完毕！`)
-        })
-        writeStream.on('error', (err) => {
-            reject(err)
-        })
-    })
-}
 
+async function downloadImg(url, dirName) {
+	let basename = path.basename(url)
+	let filePath = path.join(dirName, basename)
+	console.time(basename)
+	let res = await fetch(url, { method: 'get', headers: headers });
+	let writeStream = fs.createWriteStream(filePath)
+	writeStream.on('finish', console.timeEnd.bind(console, basename))
+	res.body.pipe(writeStream)
+    return "1"
+}
 
 async function download(url) {
     let response = await fetch(url, { method: 'get', headers: headers });
-    if (response && response.statusCode == 200) {
+    if (response && response.status == 200) {
         let data = await response.text();
-        var $ = cheerio.load(data);
-        var dirName = $("h1[class='uk-article-title uk-text-truncate']").text();
-        var url = $("img").eq(0).attr("src");
-        var imgBaseUrl = url.replace(/[0-9]{2}[a-i]+\.jpg$/, "");
+        let $ = cheerio.load(data);
+        let dirName = path.join(dir,$("h1[class='uk-article-title uk-text-truncate']").text());
+        let url = $("img").eq(0).attr("src");
+        let imgBaseUrl = url.replace(/[0-9]{2}[a-i]+\.jpg$/, "");
         if (!fs.existsSync(dirName)) {
             fs.mkdir(dirName, 0777, function (err) {
                 if (err) {
@@ -71,8 +64,11 @@ async function download(url) {
         }
         dImgs();
         async function dImgs() {
+            let message = await downloadImg(url, dirName);
+            console.log(message);
             console.log("==================");
-            for (var i = 1; i <= suffixArr; i++) {
+            await sleep(2000)
+            for (let i = 1; i <= suffixArr; i++) {
                 let message = await downloadImg(`${imgBaseUrl}${num}.jpg`, dirName);
                 console.log(message);
                 await sleep(2000)
@@ -89,7 +85,7 @@ const param = process.argv.splice(2);
 param && function () {
     suffix();
     param.forEach(function (t, i) {
-        var url = /^(http)/.test(t) ? t : baseUrl + t;
+        let url = /^(http)/.test(t) ? t : baseUrl + t;
         console.log(url);
         download(url);
     });
