@@ -48,17 +48,23 @@ async function sleep(time) {
 }
 
 async function downloadImg(url, dirName) {
-    let basename = new Date().getTime() + path.basename(url)
-    let filePath = path.join(dirName, basename)
-    console.time(basename)
-    let res = await fetch(url, { method: 'get', headers: headers });
-    if (res.status == 404) {
+    try {
+        let basename = new Date().getTime() + path.basename(url)
+        let filePath = path.join(dirName, basename)
+        console.time(basename)
+        let res = await fetch(url, { method: 'get', headers: headers });
+        if (res.status != 200) {
+            return false;
+        }
+        let writeStream = fs.createWriteStream(filePath)
+        writeStream.on('finish', console.timeEnd.bind(console, basename))
+        res.body.pipe(writeStream)
+        return true;
+    } catch (error) {
+        console.log(error.message)
         return false;
     }
-    let writeStream = fs.createWriteStream(filePath)
-    writeStream.on('finish', console.timeEnd.bind(console, basename))
-    res.body.pipe(writeStream)
-    return true;
+
 }
 
 async function download(url) {
@@ -79,7 +85,10 @@ async function download(url) {
         return await dImgs();
         async function dImgs() {
             console.log("=========开始下载=========");
-            await downloadImg(url, dirName);
+            let flag = await downloadImg(url, dirName);
+            if (!flag) {
+                return "failed";
+            }
             await sleep(1000)
             for (let i = 0; i < suffixArr.length;) {
                 let suffix = suffixArr[i];
@@ -88,7 +97,7 @@ async function download(url) {
                     console.log("success");
                     i = parseInt(i / 9) * 9 + 9;//成功了就跳到下一组数字
                 } else {
-                    if (suffix.indexOf("i") != -1) break;//到i都没有数据说明没有更多的图片了
+                    if (suffix.indexOf("i") != -1) return "failed";//到i都没有数据说明没有更多的图片了
                     i++;
                 }
                 await sleep(1000);
