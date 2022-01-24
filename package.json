@@ -1,0 +1,35 @@
+{
+  "name": "snippet",
+  "version": "1.0.0",
+  "description": "meizitu",
+  "main": "meizi.js",
+  "dependencies": {
+    "axios": "^0.21.1",
+    "cheerio": "^1.0.0-rc.10",
+    "commander": "^8.3.0",
+    "fs": "^0.0.1-security",
+    "exceljs": "^4.3.0",
+    "iconv-lite": "^0.6.3",
+    "https": "^1.0.0",
+    "http": "^0.0.1-security",
+    "lodash": "^4.17.21",
+    "knex": "^0.95.15",
+    "node-fetch": "^2.6.1",
+    "request": "^2.88.2",
+    "mysql": "^2.18.1"
+  },
+  "devDependencies": {},
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/TheShyLeo/Snippet.git"
+  },
+  "author": "theshyleo",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/TheShyLeo/Snippet/issues"
+  },
+  "homepage": "https://github.com/TheShyLeo/Snippet#readme"
+}
