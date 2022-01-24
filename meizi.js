@@ -22,12 +22,14 @@ program
     .option('-n,--number <String>', '图册的编号')
     .option('-s,--size <Integer>', '每个图册下载的数量', 60)
     .option('-d,--directory <String>', '文件保存目录', __dirname)
+    .option('-m,--model <String>', '模特名', 'yangchenchen')
 program.parse(process.argv)
 const options = program.opts();
 const number = options.number;
 const page = options.page;
 const size = options.size;
 const dir = options.directory
+const model = options.model
 
 // 返回后缀
 function suffix() {
@@ -115,7 +117,27 @@ async function getPages(url) {
     if (response && response.status == 200) {
         let data = await response.text();
         let reg = /https:\/\/mmzztt.com\/photo\/[0-9]+/g
+        let regPage = new RegExp(url + '/page/[0-9]+', 'g');
         let arr = [...new Set(data.match(reg))];
+        let page = data.match(regPage);
+        return arr;
+    } else {
+        console.log(response.status);
+        return [];
+    }
+}
+
+async function getModel(url) {
+    let response = await fetch(url, { method: 'get', headers: headers });
+    if (response && response.status == 200) {
+        let data = await response.text();
+        let reg = new RegExp(url + '/page/[0-9]+', 'g');
+        let pages = [url,...new Set(data.match(reg))];
+        let arr = [];
+        for (const p of pages) {
+            let page = await getPages(p);
+            arr = arr.concat(page)
+        }
         return arr;
     } else {
         console.log(response.status);
@@ -167,8 +189,13 @@ async function run() {
         let url = baseUrl + number;
         arr.push(url);
     } else {
-        let pageUrl = baseUrl + "page/" + page;
-        arr = await getPages(pageUrl);
+        if (model) {
+            let modelUrl = baseUrl + "model/" + model;
+            arr = await getModel(modelUrl);
+        }else{
+            let pageUrl = baseUrl + "page/" + page;
+            arr = await getPages(pageUrl);
+        }
     }
     // let reply = await concurrentRun(arr, 3, "下载图片");
     for (const url of arr) {
