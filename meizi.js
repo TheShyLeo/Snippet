@@ -20,8 +20,8 @@ const headers = {
 program
     .option('-p,--page <String>', '下载的页码', '1')
     .option('-n,--number <String>', '图册的编号')
-    .option('-s,--size <Integer>', '每个图册下载的数量', 60)
-    .option('-d,--directory <String>', '文件保存目录', __dirname)
+    .option('-s,--size <Integer>', '每个图册下载的数量', 100)
+    .option('-d,--directory <String>', '文件保存目录', 'F:/bizhi')
     .option('-m,--model <String>', '模特名', 'yangchenchen')
 program.parse(process.argv)
 const options = program.opts();
@@ -117,9 +117,9 @@ async function getPages(url) {
     if (response && response.status == 200) {
         let data = await response.text();
         let reg = /https:\/\/mmzztt.com\/photo\/[0-9]+/g
-        let regPage = new RegExp(url + '/page/[0-9]+', 'g');
+        // let regP = new RegExp('[0-9]+P', 'g');
         let arr = [...new Set(data.match(reg))];
-        let page = data.match(regPage);
+        // let p = [...new Set(data.match(regP))];
         return arr;
     } else {
         console.log(response.status);
