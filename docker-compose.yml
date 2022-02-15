@@ -1,0 +1,26 @@
+#部署mysql容器
+version: '3'
+services:
+    db:
+        #构建mysql镜像
+        image: mysql:8.0
+        container_name: mysql # 容器名
+        restart: always
+        command: [
+            '--character-set-server=utf8mb4',
+            '--collation-server=utf8mb4_general_ci',
+            '--max_connections=3000'
+        ] #设置utf8字符集
+        environment:
+          MYSQL_ROOT_PASSWORD: root #root管理员用户密码
+          MYSQL_USER: test   #创建test用户
+          MYSQL_PASSWORD: test  #设置test用户的密码
+        ports:
+          - '3306:3306'  #host物理直接映射端口为6606
+        volumes:
+            #mysql数据库挂载到host物理机目录G盘的目录下/g/DockerProject/mysql/data
+          - "/g/DockerProject/mysql/data:/var/lib/mysql"  
+            #容器的配置目录挂载到host物理机目录/g/DockerProject/mysql/conf  
+          - "/g/DockerProject/mysql/conf:/etc/mysql/conf.d"
+            #容器的日志目录挂载到host物理机目录/g/DockerProject/mysql/log 
+          - "/g/DockerProject/mysql/log:/var/log/mysql"
