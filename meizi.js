@@ -91,7 +91,7 @@ async function download(url) {
             if (!flag) {
                 return "failed";
             }
-            await sleep(1000)
+            await sleep(500)
             for (let i = 0; i < suffixArr.length;) {
                 let suffix = suffixArr[i];
                 let flag = await downloadImg(`${imgBaseUrl}${suffix}.jpg`, dirName);
@@ -102,7 +102,7 @@ async function download(url) {
                     if (suffix.indexOf("i") != -1) return "failed";//到i都没有数据说明没有更多的图片了
                     i++;
                 }
-                await sleep(1000);
+                await sleep(500);
             }
             return "success"
         }
