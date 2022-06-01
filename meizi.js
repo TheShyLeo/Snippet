@@ -19,7 +19,7 @@ const headers = {
 }
 program
     .option('-p,--page <String>', '下载的页码', '1')
-    .option('-n,--number <String>', '图册的编号')
+    .option('-n,--number <String>', '图册的编号','59200')
     .option('-s,--size <Integer>', '每个图册下载的数量', 100)
     .option('-d,--directory <String>', '文件保存目录', 'F:/bizhi')
     .option('-m,--model <String>', '模特名', 'yangchenchen')
@@ -70,20 +70,22 @@ async function downloadImg(url, dirName) {
 }
 
 async function download(url) {
+    let pid = url.split('/')[4]
     let response = await fetch(url, { method: 'get', headers: headers });
     if (response && response.status == 200) {
         let data = await response.text();
         let $ = cheerio.load(data);
+        let cache_sign;
+        $('body').contents().map((i, el) => {
+            if (el.type === 'comment') {
+                console.log(el.data)  // You can get the contents of html comment
+                cache_sign = el.data
+            }
+        })
         let dirName = path.join(dir, $("h1[class='uk-article-title uk-text-truncate']").text());
         let url = $("img").eq(0).attr("src");
         let imgBaseUrl = url.replace(/[0-9]{2}[a-i]+\.jpg$/, "");
-        if (!fs.existsSync(dirName)) {
-            fs.mkdir(dirName, 0777, function (err) {
-                if (err) {
-                    console.log(err);
-                }
-            });
-        }
+        folderVerify(dirName);
         return await dImgs();
         async function dImgs() {
             console.log("=========开始下载=========");
@@ -182,14 +184,37 @@ async function concurrentRun(fnList = [], max = 5, taskName = "未命名") {
     return replyList;
 }
 
-async function run() {
+function decrypt(pid,acheSign){
+    let key = "";
+    for (i = 2; i < 18; i++) {
+        key += (pid % i) % 9;
+    }
+    let IV = ""+key;
+}
+
+async function init(){
     suffix();//初始化后缀
+    folderVerify(dir);
+}
+
+function folderVerify(dir) {
+    if (!fs.existsSync(dir)) {
+        fs.mkdir(dir, 0777, function (err) {
+            if (err) {
+                console.log(err);
+            }
+        });
+    }
+}
+
+async function run() {
+    init();
     let arr = [];
     if (number) {
         let url = baseUrl + number;
         arr.push(url);
     } else {
-        if (model) {
+        if (model&& model!='') {
             let modelUrl = baseUrl + "model/" + model;
             arr = await getModel(modelUrl);
         }else{
