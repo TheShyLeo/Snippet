@@ -22,6 +22,4 @@ let str = 'a4028ab58b2c6aa3bd43fe748ac2b46a838197cac34a0e2d8cb90884760a55a99222f
 let pid = 65805;
 let result = aesDecode(str,pid);
 console.log(result);
-//\x64\x6d\x70\x47\x66
-
-//seo wxy iyc mda mhp vgg xza xsk noe mah arc
+console.log(CryptoJS.MD5('abacseo').toString());
