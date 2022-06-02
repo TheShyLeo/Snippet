@@ -42,13 +42,11 @@ async function downloadImg(url, dirName) {
     try {
         let basename = new Date().getTime() + path.basename(url)
         let filePath = path.join(dirName, basename)
-        console.time(basename)
         let res = await fetch(url, { method: 'get', headers: headers });
         if (res.status != 200) {
             return false;
         }
         let writeStream = fs.createWriteStream(filePath)
-        writeStream.on('finish', console.timeEnd.bind(console, basename))
         res.body.pipe(writeStream)
         return true;
     } catch (error) {
@@ -101,23 +99,27 @@ async function download(url) {
 }
 
 async function dImgs(imgBaseUrl, arr, dirName) {
-    console.log("=========开始下载=========");
-    const spinner = ora('Downloading...\n').start();
-    spinner.color = 'yellow';
-    console.log("=========创建文件夹=========");
+    let count = 1;
+    let total = arr.length;
+    const task = ora('Downloading...').start();
+    const spinner = ora().start();
+    spinner.info(`开始下载${total}张图片`)
     folderVerify(dirName);
-    console.log("图册数量: ", arr.length);
     for (const v of arr) {
         let url = imgBaseUrl + v;
+        let t0 = performance.now();
         let result = await downloadImg(url, dirName);
-        spinner.succeed(`${url} 下载成功!`);
+        let t1 = performance.now();
+        //百分比
+        let percent = (count / total * 100).toFixed(2);
+        spinner.succeed(`${v} 下载成功! 耗时: ${(t1 - t0).toFixed(2)}ms, 完成${percent}%`);
         await sleep(500);
+        count++;
         if (!result) {
             spinner.fail(`${url} 下载失败!`);
         }
     }
-    spinner.color = 'green';
-    spinner.succeed(`${dirName} 下载完成!`);
+    task.succeed(`${dirName} 下载完成!`);
     return true;
 }
 
