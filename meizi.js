@@ -8,6 +8,8 @@ import { Command } from 'commander';
 import { fileURLToPath } from 'url';
 import { load } from 'cheerio'
 import fetch from 'node-fetch';
+import pLimit from 'p-limit';
+import pQueue from 'p-queue';
 import path from 'path';
 import ora from 'ora';
 import fs from 'fs';
@@ -98,30 +100,75 @@ async function download(url) {
     return await dImgs(imgBaseUrl, arr, dirName);
 }
 
+let count = 1;
 async function dImgs(imgBaseUrl, arr, dirName) {
-    let count = 1;
     let total = arr.length;
+    const queue = new pQueue({ concurrency: 2, autoStart: false });
     const task = ora('Downloading...').start();
     const spinner = ora().start();
     spinner.info(`开始下载${total}张图片`)
     folderVerify(dirName);
     for (const v of arr) {
-        let url = imgBaseUrl + v;
-        let t0 = performance.now();
-        let result = await downloadImg(url, dirName);
-        let t1 = performance.now();
-        //百分比
-        let percent = (count / total * 100).toFixed(2);
-        spinner.succeed(`${v} 下载成功! 耗时: ${(t1 - t0).toFixed(2)}ms, 完成${percent}%`);
-        await sleep(500);
-        count++;
-        if (!result) {
-            spinner.fail(`${url} 下载失败!`);
+        queue.add(async () => {
+            await fn(imgBaseUrl, v, dirName, total, queue, spinner);
+        });
+        if (queue.size % 10 == 0) {
+            queue.start();
+            await queue.onEmpty();
+            await sleep(1000);
+            queue.pause();
         }
     }
+    queue.start();
+    await queue.onEmpty();
     task.succeed(`${dirName} 下载完成!`);
     return true;
 }
+
+const fn = async (imgBaseUrl, v, dirName, total, queue, spinner) => {
+    let url = imgBaseUrl + v;
+    let t0 = performance.now();
+    let result = await downloadImg(url, dirName);
+    let t1 = performance.now();
+    if (!result) {
+        spinner.fail(`${url} 下载失败!`);
+        //失败重试
+        queue.add(async () => {
+            await fn(imgBaseUrl, v, dirName, total, queue, spinner);
+        });
+    } else {
+        //百分比
+        let percent = (count / total * 100).toFixed(2);
+        spinner.succeed(`${v} 下载成功! 耗时: ${(t1 - t0).toFixed(2)}ms 进度: ${percent}%`);
+        count++;
+    }
+}
+
+//同步下载
+// async function dImgs(imgBaseUrl, arr, dirName) {
+//     let count = 1;
+//     let total = arr.length;
+//     const task = ora('Downloading...').start();
+//     const spinner = ora().start();
+//     spinner.info(`开始下载${total}张图片`)
+//     folderVerify(dirName);
+//     for (const v of arr) {
+//         let url = imgBaseUrl + v;
+//         let t0 = performance.now();
+//         let result = await downloadImg(url, dirName);
+//         let t1 = performance.now();
+//         //百分比
+//         let percent = (count / total * 100).toFixed(2);
+//         spinner.succeed(`${v} 下载成功! 耗时: ${(t1 - t0).toFixed(2)}ms 进度: ${percent}%`);
+//         await sleep(300);
+//         count++;
+//         if (!result) {
+//             spinner.fail(`${url} 下载失败!`);
+//         }
+//     }
+//     task.succeed(`${dirName} 下载完成!`);
+//     return true;
+// }
 
 async function getPages(url) {
     let data = await getHtml(url)
@@ -142,42 +189,33 @@ async function getModel(url) {
     return arr;
 }
 
-//并发下载
-async function concurrentRun(fnList = [], max = 5, taskName = "未命名") {
-    if (!fnList.length) return;
+//代理
+// // 通过 https-proxy-agent 来代理https请求，http-proxy-agent 来代理http请求
+// const HttpProxyAgent = require('https-proxy-agent');
+// const fetch = require("node-fetch"); // isomorphic-fetch 也是相同的设置
+// const proxyIp = 'xx.xx.xx.xx'; // 可以配置到配置文件里，根据不同环境的需要进行设置
+// const proxyPort = '8080';
+// const fetchParam = {
+//     method: 'GET',
+//     agent: new HttpProxyAgent("http://" + proxyIp + ":" + proxyPort) 
+// }
+// fetch('请求的url', fetchParam).then((response) => {
+//    console.log(response)
+// }, (e) => {
+//     console.log(e)
+// })
 
-    const replyList = []; // 收集任务执行结果
-    const count = fnList.length; // 总任务数量
-    const startTime = new Date().getTime(); // 记录任务执行开始时间
+// 负载均衡
+// import LBA, { Random } from "load-balancer-algorithm";
 
-    let current = 0;
-    // 任务执行程序
-    const schedule = async (index) => {
-        return new Promise(async (resolve) => {
-            const url = fnList[index];
-            if (!url) return resolve();
+// const weightPool = [
+//   { host: "127.0.0.2:6061", weight: 2 },
+//   { host: "127.0.0.1:6062", weight: 3 },
+//   { host: "127.0.0.3:6063", weight: 10 },
+// ];
 
-            // 执行当前异步任务
-            const reply = await download(url);
-            replyList[index] = reply;
-            console.log(`${taskName} 事务进度 ${((++current / count) * 100).toFixed(2)}% `);
-
-            // 执行完当前任务后，继续执行任务池的剩余任务
-            await schedule(index + max);
-            resolve();
-        });
-    };
-
-    // 任务池执行程序
-    const scheduleList = [...new Array(max).keys()]
-        .map((_, index) => schedule(index));
-    // 使用 Promise.all 批量执行
-    const r = await Promise.all(scheduleList);
-
-    const cost = (new Date().getTime() - startTime) / 1000;
-    console.log(`执行完成，最大并发数： ${max}，耗时：${cost}s`);
-    return replyList;
-}
+// const wrr = new LBA.WeightedRoundRobin(weightPool);
+// const wrrAddress = wrr.pick();
 
 function folderVerify(dir) {
     if (!fs.existsSync(dir)) {
@@ -189,7 +227,7 @@ function folderVerify(dir) {
     }
 }
 
-async function getUrlArr(){
+async function getUrlArr() {
     let arr = [];
     if (number) {
         let url = baseUrl + number;
