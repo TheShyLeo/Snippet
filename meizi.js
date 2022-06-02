@@ -3,15 +3,19 @@
  * npm install
  * node meizi.js --help
  */
-
-const program = require('commander')
-const fetch = require('node-fetch');
-const cheerio = require("cheerio");
-const path = require('path')
-const fs = require('fs');
-const suffixStr = "abcdefghi";
+//改为import
+import { Command } from 'commander';
+import { fileURLToPath } from 'url';
+import { load } from 'cheerio'
+import fetch from 'node-fetch';
+import path from 'path';
+import ora from 'ora';
+import fs from 'fs';
+import CryptoJS from 'crypto-js';
 const baseUrl = "https://mmzztt.com/photo/";
-let suffixArr = [];
+const program = new Command();
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 const headers = {
     'If-None-Match': 'W/"5cc2cd8f-2c58"',
     "Referer": baseUrl,
@@ -19,30 +23,15 @@ const headers = {
 }
 program
     .option('-p,--page <String>', '下载的页码', '1')
-    .option('-n,--number <String>', '图册的编号','59200')
-    .option('-s,--size <Integer>', '每个图册下载的数量', 100)
-    .option('-d,--directory <String>', '文件保存目录', 'F:/bizhi')
+    .option('-n,--number <String>', '图册的编号', '65805')
+    .option('-d,--directory <String>', '文件保存目录', `${__dirname}/meizi`)
     .option('-m,--model <String>', '模特名', 'yangchenchen')
 program.parse(process.argv)
 const options = program.opts();
 const number = options.number;
 const page = options.page;
-const size = options.size;
 const dir = options.directory
 const model = options.model
-
-// 返回后缀
-function suffix() {
-    let str = "";
-    for (let i = 2; i <= size; i++) {
-        let ch = i > 9 ? i : '0' + i;
-        for (let char of suffixStr) {
-            str = ch + char
-            suffixArr.push(str)
-        }
-    }
-    return
-}
 
 /** 节流 防止被屏蔽IP */
 async function sleep(time) {
@@ -66,85 +55,89 @@ async function downloadImg(url, dirName) {
         console.log(error.message)
         return false;
     }
+}
 
+async function getHtml(url) {
+    try {
+        let response = await fetch(url, { method: 'get', headers: headers });
+        let html = await response.text();
+        return html;
+    } catch (err) {
+        throw err;
+    }
+}
+
+function aesDecode(encryptedStr, pid, t) {
+    let iv = "";
+    for (let i = 2; i < 18; i++) {
+        iv += (pid % i) % 9;
+    }
+    let encryptedHexStr = CryptoJS.enc.Hex.parse(encryptedStr);
+    let encryptedBase64Str = CryptoJS.enc.Base64.stringify(encryptedHexStr);
+    let key = CryptoJS.MD5(CryptoJS.enc.Utf8.parse(pid + t)).toString().substr(8, 16);
+    key = CryptoJS.enc.Utf8.parse(key);
+    let decryptedData = CryptoJS.AES.decrypt(encryptedBase64Str, key, {
+        iv: CryptoJS.enc.Utf8.parse(iv),
+        mode: CryptoJS.mode.CBC,
+        padding: CryptoJS.pad.Pkcs7
+    });
+    return JSON.parse(decryptedData.toString(CryptoJS.enc.Utf8));
 }
 
 async function download(url) {
     let pid = url.split('/')[4]
-    let response = await fetch(url, { method: 'get', headers: headers });
-    if (response && response.status == 200) {
-        let data = await response.text();
-        let $ = cheerio.load(data);
-        let cache_sign;
-        $('body').contents().map((i, el) => {
-            if (el.type === 'comment') {
-                console.log(el.data)  // You can get the contents of html comment
-                cache_sign = el.data
-            }
-        })
-        let dirName = path.join(dir, $("h1[class='uk-article-title uk-text-truncate']").text());
-        let url = $("img").eq(0).attr("src");
-        let imgBaseUrl = url.replace(/[0-9]{2}[a-i]+\.jpg$/, "");
-        folderVerify(dirName);
-        return await dImgs();
-        async function dImgs() {
-            console.log("=========开始下载=========");
-            let flag = await downloadImg(url, dirName);
-            if (!flag) {
-                return "failed";
-            }
-            await sleep(500)
-            for (let i = 0; i < suffixArr.length;) {
-                let suffix = suffixArr[i];
-                let flag = await downloadImg(`${imgBaseUrl}${suffix}.jpg`, dirName);
-                if (flag) {
-                    console.log("success");
-                    i = parseInt(i / 9) * 9 + 9;//成功了就跳到下一组数字
-                } else {
-                    if (suffix.indexOf("i") != -1) return "failed";//到i都没有数据说明没有更多的图片了
-                    i++;
-                }
-                await sleep(500);
-            }
-            return "success"
+    let data = await getHtml(url)
+    let $ = load(data);
+    let jsStr = new RegExp('view/([a-z]+).js').exec(data);
+    let signStr = new RegExp('<!--([a-z0-9]+)-->').exec(data);
+    let dirName = path.join(dir, $("h1[class='uk-article-title uk-text-truncate']").text());
+    let imgUrl = $("img").eq(0).attr("src");
+    let imgBaseUrl = imgUrl.replace(/\/[0-9a-z]+\.jpg$/, "/");
+    let sign = signStr[1].substring(64);
+    let js = 'abac' + jsStr[1];
+    let t = CryptoJS.MD5(js).toString();
+    let arr = aesDecode(sign, pid, t);
+    return await dImgs(imgBaseUrl, arr, dirName);
+}
+
+async function dImgs(imgBaseUrl, arr, dirName) {
+    console.log("=========开始下载=========");
+    const spinner = ora('Downloading...\n').start();
+    spinner.color = 'yellow';
+    console.log("=========创建文件夹=========");
+    folderVerify(dirName);
+    console.log("图册数量: ", arr.length);
+    for (const v of arr) {
+        let url = imgBaseUrl + v;
+        let result = await downloadImg(url, dirName);
+        spinner.succeed(`${url} 下载成功!`);
+        await sleep(500);
+        if (!result) {
+            spinner.fail(`${url} 下载失败!`);
         }
-    } else {
-        console.log(response.status);
-        return "failed"
     }
+    spinner.color = 'green';
+    spinner.succeed(`${dirName} 下载完成!`);
+    return true;
 }
 
 async function getPages(url) {
-    let response = await fetch(url, { method: 'get', headers: headers });
-    if (response && response.status == 200) {
-        let data = await response.text();
-        let reg = /https:\/\/mmzztt.com\/photo\/[0-9]+/g
-        // let regP = new RegExp('[0-9]+P', 'g');
-        let arr = [...new Set(data.match(reg))];
-        // let p = [...new Set(data.match(regP))];
-        return arr;
-    } else {
-        console.log(response.status);
-        return [];
-    }
+    let data = await getHtml(url)
+    let reg = /https:\/\/mmzztt.com\/photo\/[0-9]+/g
+    let arr = [...new Set(data.match(reg))];
+    return arr;
 }
 
 async function getModel(url) {
-    let response = await fetch(url, { method: 'get', headers: headers });
-    if (response && response.status == 200) {
-        let data = await response.text();
-        let reg = new RegExp(url + '/page/[0-9]+', 'g');
-        let pages = [url,...new Set(data.match(reg))];
-        let arr = [];
-        for (const p of pages) {
-            let page = await getPages(p);
-            arr = arr.concat(page)
-        }
-        return arr;
-    } else {
-        console.log(response.status);
-        return [];
+    let data = await getHtml(url)
+    let reg = new RegExp(url + '/page/[0-9]+', 'g');
+    let pages = [url, ...new Set(data.match(reg))];
+    let arr = [];
+    for (const p of pages) {
+        let page = await getPages(p);
+        arr = arr.concat(page)
     }
+    return arr;
 }
 
 //并发下载
@@ -184,22 +177,9 @@ async function concurrentRun(fnList = [], max = 5, taskName = "未命名") {
     return replyList;
 }
 
-function decrypt(pid,acheSign){
-    let key = "";
-    for (i = 2; i < 18; i++) {
-        key += (pid % i) % 9;
-    }
-    let IV = ""+key;
-}
-
-async function init(){
-    suffix();//初始化后缀
-    folderVerify(dir);
-}
-
 function folderVerify(dir) {
     if (!fs.existsSync(dir)) {
-        fs.mkdir(dir, 0777, function (err) {
+        fs.mkdir(dir, "0777", function (err) {
             if (err) {
                 console.log(err);
             }
@@ -207,25 +187,29 @@ function folderVerify(dir) {
     }
 }
 
-async function run() {
-    init();
+async function getUrlArr(){
     let arr = [];
     if (number) {
         let url = baseUrl + number;
         arr.push(url);
     } else {
-        if (model&& model!='') {
+        if (model && model != '') {
             let modelUrl = baseUrl + "model/" + model;
             arr = await getModel(modelUrl);
-        }else{
+        } else {
             let pageUrl = baseUrl + "page/" + page;
             arr = await getPages(pageUrl);
         }
     }
-    // let reply = await concurrentRun(arr, 3, "下载图片");
+    return arr;
+}
+
+async function run() {
+    folderVerify(dir);
+    let arr = await getUrlArr();
     for (const url of arr) {
-        let reply = await download(url);
-        console.log(reply)
+        await download(url);
     }
+    console.log("=========全部下载完成=========");
 };
 run();
